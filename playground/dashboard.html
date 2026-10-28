@@ -1,0 +1,3055 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>监控大屏 — prototype</title>
+        <style>
+            :root {
+                --bg: #0d0f14;
+                --panel: #151922;
+                --panel-2: #1b202b;
+                --border: #232a36;
+                --text: #d1d4dc;
+                --text-dim: #7d8592;
+                --up: #089981; /* 绿涨 */
+                --down: #f23645; /* 红跌 */
+                --accent: #f0b90b;
+                --accent-dim: #8a6d1a;
+                --danger: #f6465d;
+                --cell-select-bg: rgba(13, 15, 20, 0.85);
+            }
+            /* 白天模式：在 <html> 上加 data-theme="light" 切换 */
+            :root[data-theme="light"] {
+                --bg: #f5f7fa;
+                --panel: #ffffff;
+                --panel-2: #ffffff;
+                --border: #d7dce3;
+                --text: #1e222d;
+                --text-dim: #6b7280;
+                --up: #089981;
+                --down: #f23645;
+                --accent: #c8920a;
+                --accent-dim: #8a6d1a;
+                --danger: #f6465d;
+                --cell-select-bg: rgba(255, 255, 255, 0.92);
+            }
+            * {
+                box-sizing: border-box;
+            }
+            /* 任何显式 display 都不能覆盖 hidden 属性的隐藏语义 */
+            [hidden] {
+                display: none !important;
+            }
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                background: var(--bg);
+                color: var(--text);
+                font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+                overflow: hidden;
+            }
+            button {
+                font-family: inherit;
+            }
+            #app {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
+
+            /* ── 顶部栏 ───────────────────────────── */
+            #header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                /* 左侧留出与侧栏等宽的空间（232 侧栏 + 1 边框），
+                   使 header-left 的左边缘与图表区左边缘对齐 */
+                padding: 6px 12px 6px 233px;
+                background: var(--panel);
+                border-bottom: 1px solid var(--border);
+                flex: none;
+                height: 48px;
+                position: relative;
+                transition: padding-left 0.15s ease;
+            }
+            #app.sidebar-collapsed #header {
+                padding-left: 12px;
+            }
+            .logo {
+                position: absolute;
+                left: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                max-width: 240px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 15px;
+                font-weight: 700;
+                color: var(--accent);
+                white-space: nowrap;
+                letter-spacing: 0.5px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .logo-icon {
+                flex: none;
+                display: block;
+            }
+            .theme-toggle {
+                flex: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                margin-left: 2px;
+                padding: 0;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text);
+                border-radius: 50%;
+                font-size: 12px;
+                line-height: 1;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .theme-toggle:hover {
+                border-color: var(--accent-dim);
+            }
+
+            /* 搜索框 */
+            #search-wrap {
+                position: relative;
+                width: 280px;
+                flex: none;
+            }
+            #search-input {
+                width: 100%;
+                height: 30px;
+                padding: 0 10px 0 30px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--bg) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237d8592' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") no-repeat 9px center;
+                color: var(--text);
+                font-size: 13px;
+                outline: none;
+            }
+            #search-input:focus {
+                border-color: var(--accent-dim);
+            }
+            #search-dropdown {
+                position: absolute;
+                top: calc(100% + 4px);
+                left: 0;
+                right: 0;
+                z-index: 200;
+                max-height: 320px;
+                overflow-y: auto;
+                background: var(--panel-2);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            }
+            .search-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 7px 8px 7px 12px;
+                font-size: 13px;
+                cursor: pointer;
+                font-variant-numeric: tabular-nums;
+            }
+            .search-item:hover {
+                background: var(--border);
+            }
+            .search-item-symbol {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .search-item-star {
+                flex: none;
+                width: 24px;
+                height: 24px;
+                border: none;
+                border-radius: 5px;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 15px;
+                line-height: 1;
+                cursor: pointer;
+            }
+            .search-item-star:hover {
+                background: var(--border);
+                color: var(--accent);
+            }
+            .search-item-star.added {
+                color: #f5a623;
+            }
+            .search-empty {
+                padding: 10px 12px;
+                font-size: 12px;
+                color: var(--text-dim);
+            }
+
+            /* 布局选择器 */
+            #layout-wrap {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex: none;
+                position: relative;
+            }
+            #layout-select {
+                height: 30px;
+                max-width: 130px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+            }
+            #save-layout-btn {
+                height: 30px;
+                padding: 0 10px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #save-layout-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent-dim);
+            }
+            #delete-layout-btn {
+                height: 30px;
+                padding: 0 10px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #delete-layout-btn:hover {
+                color: var(--danger, #ef5350);
+                border-color: var(--danger, #ef5350);
+            }
+            #rename-layout-btn {
+                height: 30px;
+                padding: 0 10px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #rename-layout-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent-dim);
+            }
+            #layout-name-input {
+                height: 30px;
+                width: 150px;
+                background: var(--bg);
+                border: 1px solid var(--accent-dim);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 8px;
+                outline: none;
+            }
+            #rename-layout-input {
+                height: 30px;
+                width: 150px;
+                background: var(--bg);
+                border: 1px solid var(--accent-dim);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 8px;
+                outline: none;
+            }
+
+            /* 图表样式 */
+            #style-select {
+                height: 30px;
+                flex: none;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+            }
+            #indicator-select {
+                height: 30px;
+                flex: none;
+                max-width: 150px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text-dim);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+            }
+
+            /* 顶栏分组：左＝图表功能，右＝搜索＋布局 */
+            .header-left,
+            .header-right {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex: none;
+            }
+            .header-right {
+                margin-left: auto;
+            }
+            .tb-btn {
+                height: 30px;
+                padding: 0 8px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                white-space: nowrap;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                line-height: 1;
+            }
+            .tb-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent-dim);
+            }
+            .tb-btn:disabled {
+                opacity: 0.4;
+                cursor: default;
+                color: var(--text-dim);
+                border-color: var(--border);
+            }
+            .relative-wrap {
+                position: relative;
+                flex: none;
+            }
+            .popover {
+                position: absolute;
+                top: calc(100% + 4px);
+                left: 0;
+                z-index: 200;
+                background: var(--panel-2);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+                padding: 10px;
+            }
+            .badge {
+                min-width: 16px;
+                height: 16px;
+                padding: 0 4px;
+                border-radius: 8px;
+                background: var(--danger);
+                color: #fff;
+                font-size: 10px;
+                line-height: 16px;
+                text-align: center;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* 告警面板 */
+            #alerts-panel {
+                width: 560px;
+            }
+            .alert-form {
+                display: flex;
+                flex-wrap: nowrap;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 8px;
+            }
+            .alert-form input,
+            .alert-form select {
+                height: 26px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+            }
+            .alert-form input:focus {
+                border-color: var(--accent-dim);
+            }
+            .alert-form input[readonly] {
+                background: var(--panel);
+                color: var(--text-dim);
+                cursor: default;
+            }
+            .alert-symbol-label {
+                flex: none;
+                font-size: 11px;
+                color: var(--text-dim);
+            }
+            #alert-symbol {
+                flex: 0 1 110px;
+                min-width: 0;
+            }
+            #alert-price {
+                flex: 1 1 90px;
+            }
+            #alert-direction {
+                flex: 0 0 64px;
+            }
+            #alert-add {
+                flex: none;
+                height: 26px;
+                padding: 0 10px;
+                border: 1px solid var(--accent-dim);
+                background: transparent;
+                color: var(--accent);
+                border-radius: 5px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            #alert-add:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            .alert-divider {
+                height: 1px;
+                background: var(--border);
+                margin: 8px 0;
+            }
+            .alert-sub-title {
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+                margin-bottom: 8px;
+            }
+            #surge-symbol {
+                flex: 0 1 90px;
+                min-width: 0;
+            }
+            #surge-window {
+                flex: 0 0 78px;
+            }
+            #surge-threshold {
+                flex: 1 1 70px;
+                min-width: 0;
+            }
+            #surge-direction {
+                flex: 0 0 72px;
+            }
+            #surge-add {
+                flex: none;
+                height: 26px;
+                padding: 0 8px;
+                border: 1px solid var(--danger);
+                background: transparent;
+                color: var(--danger);
+                border-radius: 5px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            #surge-add:hover {
+                background: var(--danger);
+                color: #fff;
+            }
+            #alert-list {
+                max-height: 220px;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .alert-item {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 8px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--bg);
+                font-size: 12px;
+            }
+            .alert-item .alert-sym {
+                font-weight: 600;
+                color: var(--text);
+                flex: none;
+            }
+            .alert-item .alert-cond {
+                flex: 1;
+                color: var(--text-dim);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-variant-numeric: tabular-nums;
+            }
+            .alert-item .alert-status {
+                font-size: 11px;
+                color: var(--accent);
+                flex: none;
+            }
+            .alert-item.triggered .alert-status {
+                color: var(--danger);
+            }
+            .alert-item.triggered {
+                border-color: var(--danger);
+            }
+            .alert-empty {
+                padding: 10px;
+                font-size: 12px;
+                color: var(--text-dim);
+                text-align: center;
+            }
+            /* 触发告警的可点击消息（点击静音该条告警） */
+            #alert-toasts {
+                position: fixed;
+                left: 50%;
+                bottom: 40px;
+                transform: translateX(-50%);
+                z-index: 200;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                pointer-events: none;
+            }
+            .alert-toast {
+                pointer-events: auto;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                max-width: 70vw;
+                padding: 7px 14px;
+                border-radius: 999px;
+                background: var(--panel-2);
+                border: 1px solid var(--accent-dim);
+                color: var(--text);
+                font-size: 12px;
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                cursor: pointer;
+                animation: alert-toast-in 0.15s ease-out;
+            }
+            .alert-toast.error {
+                border-color: var(--danger);
+            }
+            .alert-toast .alert-toast-mute {
+                flex: none;
+                font-size: 11px;
+                color: var(--text-dim);
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                padding: 1px 6px;
+            }
+            .alert-toast:hover {
+                border-color: var(--accent);
+            }
+            @keyframes alert-toast-in {
+                from { opacity: 0; transform: translateY(6px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            /* 告警触发时对应格子的视觉提示：边框闪烁 + 右上角标 */
+            .vela-cell.alert-ringing {
+                animation: alert-cell-ring 1s ease-in-out infinite;
+            }
+            @keyframes alert-cell-ring {
+                0%, 100% { box-shadow: inset 0 0 0 2px var(--accent); }
+                50% { box-shadow: inset 0 0 0 4px var(--danger); }
+            }
+            .alert-cell-badge {
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                z-index: 20;
+                pointer-events: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 2px 8px;
+                border-radius: 999px;
+                background: var(--danger);
+                color: #fff;
+                font-size: 11px;
+                font-weight: 700;
+                line-height: 1.5;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            }
+
+            /* 侧边面板菜单 */
+            #panels-panel {
+                width: 140px;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .panel-item {
+                padding: 7px 10px;
+                border: none;
+                background: transparent;
+                color: var(--text);
+                font-size: 13px;
+                text-align: left;
+                border-radius: 5px;
+                cursor: pointer;
+            }
+            .panel-item:hover {
+                background: var(--border);
+                color: var(--accent);
+            }
+
+            /* 布局自定义面板 */
+            #layout-custom-wrap {
+                position: relative;
+                flex: none;
+            }
+            #layout-btn {
+                height: 30px;
+                padding: 0 10px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #layout-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent-dim);
+            }
+            #layout-panel {
+                position: absolute;
+                top: calc(100% + 4px);
+                right: 0;
+                z-index: 200;
+                width: 304px;
+                background: var(--panel-2);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+                padding: 14px;
+            }
+            #layout-panel .panel-title {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+                margin-bottom: 10px;
+            }
+            .layout-presets {
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+            .layout-preset {
+                height: 34px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text);
+                border-radius: 6px;
+                font-size: 13px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .layout-preset:hover {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+            .layout-custom-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                color: var(--text-dim);
+                border-top: 1px solid var(--border);
+                padding-top: 12px;
+                white-space: nowrap;
+            }
+            .layout-custom-row span,
+            .layout-custom-row input,
+            #layout-apply {
+                flex: none;
+            }
+            .layout-custom-row input {
+                width: 58px;
+                height: 30px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 13px;
+                text-align: center;
+                outline: none;
+            }
+            .layout-custom-row input:focus {
+                border-color: var(--accent-dim);
+            }
+            #layout-apply {
+                margin-left: auto;
+                height: 30px;
+                padding: 0 14px;
+                border: 1px solid var(--accent-dim);
+                background: transparent;
+                color: var(--accent);
+                border-radius: 6px;
+                font-size: 13px;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            #layout-apply:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            /* 分栏布局：左右/上下，每区独立行列 */
+            .split-title {
+                margin-top: 10px;
+            }
+            .split-dir-row {
+                display: flex;
+                gap: 6px;
+                margin-bottom: 8px;
+            }
+            .split-dir-btn {
+                flex: 1;
+                height: 28px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            .split-dir-btn.active {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+                font-weight: 600;
+            }
+            .split-region-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                color: var(--text-dim);
+                margin-bottom: 6px;
+                white-space: nowrap;
+            }
+            .split-region-label {
+                flex: none;
+                width: 28px;
+            }
+            .split-region-row input {
+                flex: none;
+                width: 48px;
+                height: 28px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 13px;
+                text-align: center;
+                outline: none;
+            }
+            .split-region-row input:focus {
+                border-color: var(--accent-dim);
+            }
+            #split-apply {
+                width: 100%;
+                height: 30px;
+                margin-top: 4px;
+                border: 1px solid var(--accent-dim);
+                background: transparent;
+                color: var(--accent);
+                border-radius: 6px;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            #split-apply:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+
+            .up {
+                color: var(--up);
+            }
+            .down {
+                color: var(--down);
+            }
+
+            /* ── 主体：侧栏 + 图表 ─────────────────── */
+            #main {
+                flex: 1;
+                display: flex;
+                min-height: 0;
+                position: relative;
+            }
+            #sidebar {
+                width: 232px;
+                flex: none;
+                display: flex;
+                flex-direction: column;
+                background: var(--panel);
+                border-right: 1px solid var(--border);
+                min-height: 0;
+                transition: margin-left 0.15s ease;
+                z-index: 20;
+                position: relative;
+            }
+            #main.sidebar-collapsed #sidebar {
+                margin-left: -232px;
+            }
+            /* 顶部 tab：自选 / 功能模块 */
+            .sidebar-tabs {
+                flex: none;
+                display: flex;
+                border-bottom: 1px solid var(--border);
+                background: var(--panel-2);
+            }
+            .sidebar-tab {
+                flex: 1;
+                height: 34px;
+                border: none;
+                border-bottom: 2px solid transparent;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 12px;
+                font-weight: 600;
+                font-family: inherit;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 5px;
+                white-space: nowrap;
+            }
+            .sidebar-tab:hover {
+                color: var(--text);
+            }
+            .sidebar-tab.active {
+                color: var(--accent);
+                border-bottom-color: var(--accent-dim);
+                background: var(--bg);
+            }
+            .sidebar-panel {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            .sidebar-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 10px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-dim);
+                border-bottom: 1px solid var(--border);
+                flex: none;
+            }
+            .sidebar-actions {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .icon-btn {
+                border: none;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 13px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .icon-btn:hover {
+                color: var(--text);
+                background: var(--border);
+            }
+            .icon-btn.danger:hover {
+                color: var(--danger);
+            }
+
+            /* 分组标签列表：按名称宽度动态换行，短名称一行多个，长名称占整行 */
+            #group-list {
+                flex: none;
+                max-height: 45%;
+                overflow-y: auto;
+                padding: 6px;
+                display: flex;
+                flex-wrap: wrap;
+                align-content: flex-start;
+                gap: 4px;
+            }
+            .group-item {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 8px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--panel-2);
+                font-size: 12px;
+                cursor: pointer;
+                user-select: none;
+                flex: 0 0 auto;
+                max-width: 100%;
+            }
+            .group-item:hover {
+                background: var(--border);
+            }
+            .group-item.active {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+            .group-item.dragging {
+                opacity: 0.5;
+            }
+            .group-item .grip {
+                color: var(--text-dim);
+                cursor: grab;
+                font-size: 12px;
+                padding: 2px;
+            }
+            .group-item .group-name {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .group-item .group-count {
+                font-size: 11px;
+                color: var(--text-dim);
+                background: var(--border);
+                border-radius: 8px;
+                padding: 1px 6px;
+                font-variant-numeric: tabular-nums;
+            }
+            .group-name-input {
+                flex: 1;
+                font-size: 13px;
+                font-weight: 600;
+                background: var(--bg);
+                border: 1px solid var(--accent-dim);
+                border-radius: 4px;
+                color: var(--text);
+                padding: 2px 6px;
+                outline: none;
+            }
+            .group-new {
+                padding: 4px;
+            }
+            .group-new input {
+                width: 100%;
+                height: 28px;
+                font-size: 13px;
+                background: var(--bg);
+                border: 1px solid var(--accent-dim);
+                border-radius: 6px;
+                color: var(--text);
+                padding: 0 8px;
+                outline: none;
+            }
+
+            /* 当前分组自选列表 */
+            .sidebar-subheader {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 6px 10px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+                border-top: 1px solid var(--border);
+                border-bottom: 1px solid var(--border);
+                flex: none;
+            }
+            #token-list {
+                list-style: none;
+                margin: 0;
+                padding: 6px;
+                flex: 1;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .token {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 5px 8px;
+                border-radius: 6px;
+                font-size: 13px;
+                font-variant-numeric: tabular-nums;
+                cursor: pointer;
+                user-select: none;
+            }
+            .token:hover {
+                background: var(--border);
+            }
+            .token.dragging {
+                opacity: 0.5;
+            }
+            .token .grip {
+                color: var(--text-dim);
+                cursor: grab;
+                font-size: 12px;
+                padding: 2px;
+            }
+            .token-symbol {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .token-remove {
+                border: none;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 14px;
+                padding: 0 4px;
+                border-radius: 4px;
+                cursor: pointer;
+                line-height: 1;
+            }
+            .token-remove:hover {
+                color: var(--danger);
+            }
+            .empty-tip {
+                padding: 10px 8px;
+                font-size: 12px;
+                color: var(--text-dim);
+                text-align: center;
+            }
+
+            /* ── 系统设置（左下角说明/设置按钮 + 多 tab 弹窗） ──── */
+            #sidebar-footer {
+                flex: none;
+                display: flex;
+                border-top: 1px solid var(--border);
+            }
+            #sidebar-footer button {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                height: 36px;
+                border: none;
+                background: var(--panel-2);
+                color: var(--text-dim);
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            #sidebar-footer button + button {
+                border-left: 1px solid var(--border);
+            }
+            #sidebar-footer button:hover {
+                color: var(--accent);
+                background: var(--panel);
+            }
+            #settings-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 100;
+                background: rgba(0, 0, 0, 0.55);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .settings-modal {
+                width: 560px;
+                max-width: calc(100vw - 40px);
+                height: min(640px, 80vh);
+                display: flex;
+                flex-direction: column;
+                background: var(--panel-2);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+                overflow: hidden;
+            }
+            .settings-modal-head {
+                flex: none;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 10px 14px;
+                border-bottom: 1px solid var(--border);
+            }
+            .settings-modal-title {
+                font-size: 14px;
+                font-weight: 700;
+                color: var(--text);
+            }
+            .settings-modal-close {
+                border: none;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 14px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .settings-modal-close:hover {
+                color: var(--text);
+                background: var(--panel);
+            }
+            .settings-modal-main {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+            }
+            .settings-tabs {
+                flex: none;
+                width: 120px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                padding: 8px 6px;
+                border-right: 1px solid var(--border);
+                background: var(--panel);
+                overflow-y: auto;
+            }
+            .settings-tab {
+                padding: 8px 10px;
+                border: none;
+                border-radius: 6px;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+                text-align: left;
+            }
+            .settings-tab:hover {
+                color: var(--text);
+                background: var(--panel-2);
+            }
+            .settings-tab.active {
+                color: var(--accent);
+                background: var(--bg);
+                box-shadow: inset 2px 0 0 var(--accent);
+            }
+            .settings-modal-body {
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+                padding: 12px 14px;
+            }
+            .settings-tab-panel {
+                display: none;
+                flex-direction: column;
+                gap: 8px;
+                height: 100%;
+            }
+            .settings-tab-panel.active {
+                display: flex;
+            }
+            /* ── 功能说明弹窗（左下角「说明」按钮） ──────────── */
+            #help-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 110;
+                background: rgba(0, 0, 0, 0.55);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .help-modal {
+                width: 640px;
+                max-width: calc(100vw - 40px);
+                max-height: min(720px, 85vh);
+                display: flex;
+                flex-direction: column;
+                background: var(--panel-2);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+                overflow: hidden;
+            }
+            .help-modal-head {
+                flex: none;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 10px 14px;
+                border-bottom: 1px solid var(--border);
+            }
+            .help-modal-title {
+                font-size: 14px;
+                font-weight: 700;
+                color: var(--text);
+            }
+            .help-modal-close {
+                border: none;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 14px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .help-modal-close:hover {
+                color: var(--text);
+                background: var(--panel);
+            }
+            .help-modal-body {
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+                padding: 14px 16px;
+                color: var(--text);
+                font-size: 13px;
+                line-height: 1.7;
+            }
+            .help-section + .help-section {
+                margin-top: 14px;
+            }
+            .help-section h3 {
+                margin: 0 0 6px;
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--accent);
+            }
+            .help-section p {
+                margin: 0;
+            }
+            .help-section ul.help-list {
+                margin: 0;
+                padding-left: 18px;
+            }
+            .help-section li {
+                margin: 2px 0;
+            }
+            .help-section code {
+                font-family: Consolas, Monaco, monospace;
+                font-size: 12px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 1px 5px;
+                color: var(--text);
+            }
+            .help-version {
+                margin: 16px 0 0;
+                text-align: center;
+                color: var(--text-dim);
+                font-size: 12px;
+            }
+            /* 警报声音维护 */
+            .sound-panel-title {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+                margin-bottom: 2px;
+            }
+            .sound-picker-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+            #sound-select {
+                flex: 1;
+                min-width: 0;
+                height: 28px;
+                padding: 0 6px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                font-family: inherit;
+                outline: none;
+            }
+            #sound-select:focus {
+                border-color: var(--accent-dim);
+            }
+            #sound-preview {
+                flex: none;
+                height: 28px;
+                padding: 0 10px;
+                border: 1px solid var(--border);
+                background: transparent;
+                color: var(--accent);
+                border-radius: 5px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            #sound-preview:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            #sound-reset {
+                flex: none;
+                height: 26px;
+                padding: 0 10px;
+                border: 1px solid var(--border);
+                background: transparent;
+                color: var(--accent);
+                border-radius: 5px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            #sound-reset:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            .sound-upload-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 12px;
+                color: var(--text-dim);
+            }
+            #sound-file {
+                flex: 1;
+                min-width: 0;
+                font-size: 12px;
+                color: var(--text-dim);
+            }
+            .sound-hint {
+                font-size: 11px;
+                color: var(--text-dim);
+                margin: 0;
+                line-height: 1.6;
+            }
+            /* 告警维护 */
+            .alerts-manage-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                margin-bottom: 2px;
+            }
+            .alerts-manage-title {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+            }
+            #alert-sort {
+                flex: none;
+                height: 26px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+            }
+            #alerts-manage-list {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                overflow-y: auto;
+            }
+            .alert-manage-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 7px 10px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--bg);
+                font-size: 12px;
+            }
+            .alert-manage-row.triggered {
+                border-color: var(--danger);
+            }
+            .alert-manage-sym {
+                flex: none;
+                font-weight: 600;
+                color: var(--text);
+            }
+            .alert-manage-cond {
+                flex: 1;
+                color: var(--text-dim);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-variant-numeric: tabular-nums;
+            }
+            .alert-manage-status {
+                flex: none;
+                font-size: 11px;
+                color: var(--accent);
+            }
+            .alert-manage-row.triggered .alert-manage-status {
+                color: var(--danger);
+            }
+            .alert-manage-btn {
+                flex: none;
+                height: 24px;
+                padding: 0 8px;
+                border: 1px solid var(--border);
+                background: transparent;
+                color: var(--text-dim);
+                border-radius: 5px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            .alert-manage-btn:hover {
+                color: var(--text);
+                border-color: var(--accent-dim);
+            }
+            .alert-manage-btn.primary {
+                color: var(--accent);
+            }
+            .alert-manage-btn.primary:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            .alert-manage-btn.danger {
+                color: var(--danger);
+            }
+            .alert-manage-btn.danger:hover {
+                background: var(--danger);
+                color: #fff;
+            }
+            .alert-manage-edit {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px;
+                padding: 7px 10px;
+                border: 1px solid var(--accent-dim);
+                border-radius: 6px;
+                background: var(--bg);
+                font-size: 12px;
+            }
+            .alert-manage-edit input,
+            .alert-manage-edit select {
+                height: 26px;
+                background: var(--panel);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+            }
+            .alert-manage-edit input:focus,
+            .alert-manage-edit select:focus {
+                border-color: var(--accent-dim);
+            }
+            .alert-manage-edit .edit-symbol {
+                flex: 0 1 110px;
+                min-width: 0;
+            }
+            .alert-manage-edit .edit-price,
+            .alert-manage-edit .edit-threshold {
+                flex: 0 1 90px;
+                min-width: 0;
+            }
+            .alert-manage-edit .edit-window,
+            .alert-manage-edit .edit-direction {
+                flex: 0 0 auto;
+            }
+            .alert-manage-edit .edit-actions {
+                flex: 1;
+                display: flex;
+                justify-content: flex-end;
+                gap: 6px;
+            }
+            .settings-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                color: var(--text-dim);
+            }
+            .settings-row select {
+                flex: 1;
+                height: 26px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 4px;
+                outline: none;
+                min-width: 0;
+            }
+            #ema-line-list {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                overflow-y: auto;
+            }
+            .ema-line {
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--panel);
+                padding: 6px;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            .ema-line-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 4px;
+            }
+            .ema-enabled {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 12px;
+                color: var(--text);
+                cursor: pointer;
+                user-select: none;
+            }
+            .ema-del {
+                border: none;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 13px;
+                padding: 0 4px;
+                border-radius: 4px;
+                cursor: pointer;
+                line-height: 1;
+            }
+            .ema-del:hover {
+                color: var(--danger);
+            }
+            .ema-line-fields {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 4px 6px;
+            }
+            .ema-line-fields label {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                color: var(--text-dim);
+                white-space: nowrap;
+            }
+            .ema-line-fields input,
+            .ema-line-fields select {
+                flex: 1;
+                min-width: 0;
+                height: 24px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 4px;
+                outline: none;
+            }
+            .ema-line-fields input[type="color"] {
+                padding: 1px;
+                height: 24px;
+                width: 40px;
+                flex: none;
+                cursor: pointer;
+            }
+            .settings-add-btn {
+                height: 28px;
+                border: 1px dashed var(--border);
+                background: transparent;
+                color: var(--text-dim);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                flex: none;
+            }
+            .settings-add-btn:hover {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+
+            /* ── Pine 脚本编辑器（右下角伸展框，顶部分割线可拖动调高） ─── */
+            #pine-dock {
+                flex: none;
+                display: flex;
+                flex-direction: column;
+                height: 280px;
+                min-height: 100px;
+                max-height: 75%;
+                border-top: 1px solid var(--border);
+                background: var(--panel-2);
+                z-index: 20;
+            }
+            #pine-dock.collapsed {
+                height: auto;
+                min-height: 0;
+            }
+            #pine-resize {
+                flex: none;
+                height: 5px;
+                cursor: ns-resize;
+                touch-action: none;
+                background: var(--border);
+            }
+            #pine-resize:hover,
+            #pine-resize.dragging {
+                background: var(--accent-dim);
+            }
+            #pine-dock-bar {
+                flex: none;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                height: 32px;
+                padding: 0 10px;
+                border-bottom: 1px solid var(--border);
+                cursor: pointer;
+                user-select: none;
+            }
+            .pine-dock-title {
+                font-size: 12px;
+                font-weight: 700;
+                color: var(--text);
+                letter-spacing: 0.3px;
+            }
+            #pine-dock-toggle {
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text-dim);
+                border-radius: 4px;
+                font-size: 11px;
+                height: 22px;
+                padding: 0 8px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            #pine-dock-toggle:hover {
+                color: var(--accent);
+                border-color: var(--accent-dim);
+            }
+            #pine-dock-body {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+            }
+            #pine-dock.collapsed #pine-dock-body,
+            #pine-dock.collapsed #pine-resize {
+                display: none;
+            }
+            #pine-dock-toolbar {
+                flex: none;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 10px;
+                border-bottom: 1px solid var(--border);
+            }
+            #pine-name-input {
+                width: 200px;
+                height: 26px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 6px;
+                outline: none;
+                font-family: inherit;
+            }
+            #pine-dock-toolbar button {
+                height: 26px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text);
+                border-radius: 5px;
+                font-size: 12px;
+                padding: 0 12px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            #pine-dock-toolbar button:hover {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+            #pine-dock-toolbar #pine-clear-btn:hover {
+                border-color: var(--danger);
+                color: var(--danger);
+            }
+            #pine-editor {
+                flex: 1;
+                min-height: 0;
+                width: 100%;
+                box-sizing: border-box;
+                background: var(--bg);
+                border: none;
+                border-bottom: 1px solid var(--border);
+                color: var(--text);
+                font-size: 12px;
+                line-height: 1.5;
+                padding: 6px 10px;
+                outline: none;
+                resize: none;
+                font-family: "Consolas", "Courier New", monospace;
+            }
+            #pine-script-select {
+                flex: 1;
+                min-width: 0;
+                height: 26px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 4px;
+                outline: none;
+                font-family: inherit;
+            }
+            #pine-script-select:focus {
+                border-color: var(--accent-dim);
+            }
+            #pine-status {
+                flex: none;
+                font-size: 11px;
+                color: var(--text-dim);
+                min-height: 14px;
+                line-height: 1.4;
+                padding: 2px 10px 4px;
+            }
+            #pine-status.error {
+                color: var(--danger);
+            }
+            #pine-status.ok {
+                color: var(--up);
+            }
+
+            /* ── 连接状态指示灯（K 线监控 后的小圆点） ─── */
+            .conn-dot {
+                display: inline-block;
+                width: 9px;
+                height: 9px;
+                margin-left: 8px;
+                border-radius: 50%;
+                vertical-align: middle;
+                background: var(--up);
+                box-shadow: 0 0 6px var(--up);
+            }
+            .conn-dot.slow {
+                background: var(--accent);
+                box-shadow: 0 0 6px var(--accent);
+                animation: none;
+                opacity: 1;
+            }
+            .conn-dot.down {
+                background: var(--danger);
+                box-shadow: 0 0 6px var(--danger);
+                animation: none;
+                opacity: 1;
+            }
+            @keyframes conn-blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.25; }
+            }
+            .conn-dot.blink {
+                animation: conn-blink 1.2s ease-in-out infinite;
+            }
+
+            /* ── 断线告警提示框 ─── */
+            #conn-alert {
+                position: fixed;
+                inset: 0;
+                z-index: 110;
+                background: rgba(0, 0, 0, 0.55);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .conn-alert-box {
+                width: 360px;
+                max-width: calc(100vw - 40px);
+                padding: 18px 20px 16px;
+                background: var(--panel-2);
+                border: 1px solid var(--danger);
+                border-radius: 10px;
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+                text-align: center;
+            }
+            .conn-alert-title {
+                font-size: 15px;
+                font-weight: 700;
+                color: var(--danger);
+                margin-bottom: 8px;
+            }
+            .conn-alert-msg {
+                font-size: 12px;
+                color: var(--text-dim);
+                line-height: 1.6;
+                margin-bottom: 14px;
+            }
+            .conn-alert-close {
+                height: 30px;
+                padding: 0 18px;
+                border: 1px solid var(--danger);
+                background: transparent;
+                color: var(--danger);
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .conn-alert-close:hover {
+                background: var(--danger);
+                color: #fff;
+            }
+
+            /* 展开按钮（折叠时显示） */
+            #sidebar-expand {
+                position: absolute;
+                left: 0;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 30;
+                height: 64px;
+                width: 18px;
+                padding: 0;
+                border: 1px solid var(--border);
+                border-left: none;
+                border-radius: 0 6px 6px 0;
+                background: var(--panel);
+                color: var(--text-dim);
+                font-size: 11px;
+                cursor: pointer;
+                display: none;
+            }
+            #sidebar-expand:hover {
+                color: var(--accent);
+            }
+            #main.sidebar-collapsed #sidebar-expand {
+                display: block;
+            }
+
+            /* 收起按钮：贴在侧栏右边框上，与展开按钮同一水平位置 */
+            #collapse-btn {
+                position: absolute;
+                left: 232px;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 30;
+                height: 64px;
+                width: 18px;
+                padding: 0;
+                border: 1px solid var(--border);
+                border-left: none;
+                border-radius: 0 6px 6px 0;
+                background: var(--panel);
+                color: var(--text-dim);
+                font-size: 11px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            #collapse-btn:hover {
+                color: var(--accent);
+            }
+            #main.sidebar-collapsed #collapse-btn {
+                display: none;
+            }
+
+            /* 右侧列：图表 + 底部 Pine 编辑器 */
+            #right {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+            }
+            /* 图表区 */
+            #dashboard {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+                min-width: 0;
+            }
+            /* 隐藏 Vela 自带英文顶栏，使用自定义中文 UI */
+            #dashboard .vela-widget-topbar {
+                display: none !important;
+            }
+            /* 每个格子右上角的周期下拉 */
+            .cell-timeframe-select {
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                z-index: 10;
+                height: 24px;
+                background: var(--cell-select-bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 11px;
+                padding: 0 4px;
+                outline: none;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .cell-timeframe-select option {
+                background: var(--panel-2);
+                color: var(--text);
+            }
+            .cell-timeframe-select:hover,
+            .cell-timeframe-select:focus {
+                border-color: var(--accent-dim);
+            }
+
+            /* ── 功能模块：侧栏固定入口 ──────────────────── */
+            .holdings-entry {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin: 6px;
+                padding: 8px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--panel-2);
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text);
+                cursor: pointer;
+                user-select: none;
+                flex: none;
+                width: calc(100% - 12px);
+                font-family: inherit;
+                text-align: left;
+            }
+            .holdings-entry:hover {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+            .holdings-entry.active {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+                background: var(--bg);
+            }
+            .holdings-entry .holdings-entry-icon {
+                flex: none;
+            }
+            .holdings-entry .holdings-entry-name {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            /* ── 功能模块：可扩展的功能入口列表 ────────────── */
+            #feature-list {
+                list-style: none;
+                margin: 0;
+                padding: 6px;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .feature-entry {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                padding: 8px 10px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--panel);
+                color: var(--text);
+                font-size: 12px;
+                font-family: inherit;
+                cursor: pointer;
+                text-align: left;
+                transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+            }
+            .feature-entry:hover {
+                border-color: var(--accent-dim);
+                background: var(--panel-2);
+            }
+            .feature-entry.active {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+                background: var(--bg);
+            }
+            .feature-entry:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: -2px;
+            }
+            .feature-icon {
+                flex: none;
+                display: block;
+            }
+
+            /* ── 右侧功能面板（「功能模块」里的功能显示在这里） ── */
+            #feature-panel {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+                display: flex;
+                flex-direction: column;
+            }
+            #feature-panel[hidden] {
+                display: none !important;
+            }
+
+            /* ── Pine 选币命中币的浮动 K 线预览窗口 ── */
+            #screener-preview {
+                position: absolute;
+                right: 12px;
+                bottom: 12px;
+                width: 55%;
+                height: 74%;
+                z-index: 60;
+                display: flex;
+                flex-direction: column;
+                background: #0e1223;
+                border: 1px solid #334155;
+                border-radius: 10px;
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+                overflow: hidden;
+            }
+            #screener-preview[hidden] {
+                display: none !important;
+            }
+            .screener-preview-header {
+                flex: none;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 10px;
+                border-bottom: 1px solid #334155;
+                background: #1a1e2f;
+            }
+            .screener-preview-title {
+                flex: 1;
+                min-width: 0;
+                font-size: 13px;
+                font-weight: 700;
+                color: #f8fafc;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .screener-preview-timeframe {
+                flex: none;
+                height: 26px;
+                background: #0e1223;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                color: #f8fafc;
+                font-size: 12px;
+                font-family: inherit;
+                padding: 0 6px;
+                outline: none;
+            }
+            .screener-preview-timeframe:focus {
+                border-color: #60a5fa;
+            }
+            .screener-preview-btn {
+                flex: none;
+                height: 26px;
+                padding: 0 10px;
+                border: 1px solid #60a5fa;
+                background: rgba(96, 165, 250, 0.12);
+                color: #60a5fa;
+                border-radius: 6px;
+                font-size: 12px;
+                font-family: inherit;
+                cursor: pointer;
+                transition: background-color 0.15s ease, color 0.15s ease;
+            }
+            .screener-preview-btn:hover {
+                background: #60a5fa;
+                color: #06121f;
+            }
+            .screener-preview-close {
+                flex: none;
+                width: 26px;
+                height: 26px;
+                border: none;
+                background: transparent;
+                color: #94a3b8;
+                font-size: 16px;
+                line-height: 1;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            .screener-preview-close:hover {
+                background: rgba(148, 163, 184, 0.15);
+                color: #f8fafc;
+            }
+            .screener-preview-chart {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+            }
+
+            /* ── 我的持仓视图（覆盖右侧主区域） ──────────── */
+            #holdings-view {
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                left: 232px; /* stay to the right of the sidebar, not full-screen */
+                z-index: 25;
+                background: var(--bg);
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                transition: left 0.15s ease;
+            }
+            #main.sidebar-collapsed #holdings-view {
+                left: 0;
+            }
+            .holdings-toolbar {
+                flex: none;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 12px;
+                border-bottom: 1px solid var(--border);
+                background: var(--panel);
+            }
+            .holdings-title {
+                font-size: 14px;
+                font-weight: 700;
+                color: var(--text);
+            }
+            .currency-toggle {
+                display: inline-flex;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+            .currency-toggle button {
+                height: 26px;
+                padding: 0 12px;
+                border: none;
+                background: var(--bg);
+                color: var(--text-dim);
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .currency-toggle button.active {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            .holdings-rate {
+                font-size: 12px;
+                color: var(--text-dim);
+                font-variant-numeric: tabular-nums;
+            }
+            .holdings-add-btn {
+                margin-left: auto;
+                height: 28px;
+                padding: 0 14px;
+                border: 1px solid var(--accent-dim);
+                background: transparent;
+                color: var(--accent);
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .holdings-add-btn:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            .add-holding-form {
+                flex: none;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 12px;
+                border-bottom: 1px solid var(--border);
+                background: var(--panel-2);
+            }
+            .add-holding-form input {
+                height: 28px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                color: var(--text);
+                font-size: 12px;
+                padding: 0 8px;
+                outline: none;
+                font-family: inherit;
+            }
+            .add-holding-form input:focus {
+                border-color: var(--accent-dim);
+            }
+            .add-holding-form #new-symbol {
+                width: 150px;
+            }
+            .add-holding-form #new-qty,
+            .add-holding-form #new-price {
+                width: 110px;
+            }
+            .add-holding-form #new-date {
+                width: 140px;
+            }
+            .add-holding-form #new-remark {
+                flex: 1;
+                min-width: 120px;
+            }
+            .add-holding-form button {
+                height: 28px;
+                padding: 0 12px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text);
+                border-radius: 5px;
+                font-size: 12px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .add-holding-form button:hover {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+            .add-holding-form #new-confirm {
+                border-color: var(--accent-dim);
+                color: var(--accent);
+            }
+            .add-holding-form #new-confirm:hover {
+                background: var(--accent-dim);
+                color: #fff;
+            }
+            .holdings-summary {
+                flex: none;
+                display: flex;
+                align-items: center;
+                gap: 24px;
+                padding: 8px 12px;
+                border-bottom: 1px solid var(--border);
+                background: var(--panel);
+                font-size: 12px;
+                color: var(--text-dim);
+                flex-wrap: wrap;
+            }
+            .holdings-summary b {
+                margin-left: 4px;
+                font-size: 14px;
+                color: var(--text);
+                font-variant-numeric: tabular-nums;
+            }
+            .holdings-summary b.up {
+                color: var(--up);
+            }
+            .holdings-summary b.down {
+                color: var(--down);
+            }
+            .holdings-table-wrap {
+                flex: none;
+                height: var(--holdings-table-ratio, 50%);
+                min-height: 90px;
+                overflow: auto;
+            }
+            .holdings-splitter {
+                flex: none;
+                height: 6px;
+                cursor: ns-resize;
+                background: var(--border);
+                position: relative;
+                touch-action: none;
+            }
+            .holdings-splitter::before {
+                content: "";
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                width: 44px;
+                height: 3px;
+                border-radius: 2px;
+                background: var(--text-dim);
+                opacity: 0.35;
+            }
+            .holdings-splitter:hover,
+            .holdings-splitter.dragging {
+                background: var(--accent-dim);
+            }
+            .holdings-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+                font-variant-numeric: tabular-nums;
+            }
+            .holdings-table th,
+            .holdings-table td {
+                padding: 5px 8px;
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+                white-space: nowrap;
+            }
+            .holdings-table th {
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                background: var(--panel-2);
+                color: var(--text-dim);
+                font-weight: 600;
+            }
+            .holdings-table td input {
+                width: 100%;
+                min-width: 70px;
+                height: 24px;
+                padding: 0 4px;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                background: transparent;
+                color: var(--text);
+                font-size: 12px;
+                font-family: inherit;
+                font-variant-numeric: tabular-nums;
+                outline: none;
+            }
+            .holdings-table td input:hover {
+                border-color: var(--border);
+            }
+            .holdings-table td input:focus {
+                border-color: var(--accent-dim);
+                background: var(--bg);
+            }
+            .holdings-table td.derived {
+                font-variant-numeric: tabular-nums;
+            }
+            .holdings-table td.derived.up {
+                color: var(--up);
+            }
+            .holdings-table td.derived.down {
+                color: var(--down);
+            }
+            .holdings-table .holdings-actions {
+                white-space: nowrap;
+            }
+            .holdings-table .holdings-alert-btn,
+            .holdings-table .holdings-remove-btn {
+                border: none;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 13px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .holdings-table .holdings-alert-btn:hover {
+                color: var(--accent);
+            }
+            .holdings-table .holdings-remove-btn:hover {
+                color: var(--danger);
+            }
+            .holdings-table .empty-tip {
+                padding: 20px;
+                font-size: 12px;
+                color: var(--text-dim);
+                text-align: center;
+            }
+            .coin-logo {
+                display: block;
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                object-fit: cover;
+                background: var(--panel-2);
+            }
+            .coin-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                color: #fff;
+                font-size: 10px;
+                font-weight: 700;
+            }
+            .holdings-charts {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                gap: 12px;
+                padding: 10px 12px;
+                border-top: 1px solid var(--border);
+                background: var(--panel);
+            }
+            .chart-panel {
+                flex: 1;
+                min-width: 0;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                padding: 8px 10px;
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                background: var(--panel-2);
+            }
+            .chart-title {
+                flex: none;
+                margin-bottom: 6px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+            }
+            .bar-chart {
+                flex: 1;
+                min-height: 0;
+                overflow-x: auto;
+                display: flex;
+                flex-direction: row;
+                align-items: stretch;
+                gap: 8px;
+                padding: 8px 4px 4px;
+            }
+            /* 居中显示；内容超过宽度时自动 margins 归零，允许横向滚动 */
+            .bar-chart::before,
+            .bar-chart::after {
+                content: "";
+                margin: auto;
+            }
+            .bar-chart .empty-tip {
+                padding: 8px;
+                font-size: 12px;
+                color: var(--text-dim);
+                text-align: center;
+            }
+            /* 资产占比：SVG 环形饼图 + 图例（各币颜色 / 比例 / 金额） */
+            .pie-chart {
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+            }
+            .pie-chart .empty-tip {
+                padding: 8px;
+                font-size: 12px;
+                color: var(--text-dim);
+                text-align: center;
+            }
+            .pie-wrap {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+                padding: 6px 2px;
+            }
+            .pie-svg {
+                flex: none;
+                width: 180px;
+                height: 180px;
+            }
+            .pie-total-label {
+                fill: var(--text);
+                font-size: 13px;
+                font-weight: 700;
+                font-variant-numeric: tabular-nums;
+            }
+            .pie-total-sub {
+                fill: var(--text-dim);
+                font-size: 9px;
+            }
+            .pie-legend {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+                width: fit-content;
+            }
+            .pie-legend-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+            }
+            .pie-color {
+                flex: none;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+            }
+            .pie-symbol {
+                flex: none;
+                font-weight: 600;
+                color: var(--text);
+            }
+            .pie-pct {
+                flex: none;
+                color: var(--text-dim);
+                font-variant-numeric: tabular-nums;
+            }
+            .pie-amount {
+                color: var(--text);
+                font-variant-numeric: tabular-nums;
+            }
+            .bar-column {
+                flex: 0 0 56px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+            }
+            .bar-col-value {
+                flex: none;
+                font-size: 11px;
+                color: var(--text);
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+            .bar-col-track {
+                flex: 1 1 0;
+                width: 18px;
+                min-height: 4px;
+                display: flex;
+                align-items: flex-end;
+                overflow: hidden;
+                border-radius: 4px;
+                background: var(--bg);
+            }
+            .bar-col-fill {
+                width: 100%;
+                border-radius: 4px;
+            }
+            .bar-col-label {
+                flex: none;
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+                white-space: nowrap;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <div id="header">
+                <div class="logo">
+                            <svg class="logo-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                                <line x1="5" y1="1.5" x2="5" y2="5" stroke="#089981" stroke-width="1.2" />
+                                <rect x="3" y="5" width="4" height="6" rx="0.8" fill="#089981" />
+                                <line x1="5" y1="11" x2="5" y2="14.5" stroke="#089981" stroke-width="1.2" />
+                                <line x1="11" y1="3.5" x2="11" y2="7" stroke="#f23645" stroke-width="1.2" />
+                                <rect x="9" y="7" width="4" height="6" rx="0.8" fill="#f23645" />
+                                <line x1="11" y1="13" x2="11" y2="14.5" stroke="#f23645" stroke-width="1.2" />
+                            </svg>
+                            MyView<span id="conn-dot" class="conn-dot blink" title="币安连接：正常"></span><button id="theme-toggle" type="button" class="theme-toggle" title="切换到白天模式">☀️</button>
+                        </div>
+                <div class="header-left">
+                    <select id="style-select" title="图表样式"></select>
+                    <select id="indicator-select" title="添加指标"></select>
+                    <button id="undo-btn" class="tb-btn" title="撤销 (Ctrl+Z)">↺</button>
+                    <button id="redo-btn" class="tb-btn" title="重做 (Ctrl+Y)">↻</button>
+                    <div id="alerts-wrap" class="relative-wrap">
+                        <button id="alerts-btn" class="tb-btn" title="价格告警 / 爆拉暴跌">🔔<span id="alert-badge" class="badge" hidden></span></button>
+                        <div id="alerts-panel" class="popover" hidden>
+                            <div class="panel-title">告警</div>
+                            <div class="alert-form">
+                                <span class="alert-symbol-label">格子</span>
+                                <input id="alert-symbol" type="text" readonly placeholder="当前格子币种" title="使用当前选中格子的币种" autocomplete="off" />
+                                <input id="alert-price" type="number" placeholder="目标价" min="0" step="any" />
+                                <select id="alert-direction">
+                                    <option value="above">上穿</option>
+                                    <option value="below">下穿</option>
+                                </select>
+                                <button id="alert-add">添加</button>
+                            </div>
+                            <div class="alert-divider"></div>
+                            <div class="panel-title alert-sub-title">爆拉 / 暴跌</div>
+                            <div class="alert-form">
+                                <span class="alert-symbol-label">格子</span>
+                                <input id="surge-symbol" type="text" readonly placeholder="当前格子币种" title="使用当前选中格子的币种" autocomplete="off" />
+                                <select id="surge-window">
+                                    <option value="1">1 分钟</option>
+                                    <option value="3">3 分钟</option>
+                                    <option value="5" selected>5 分钟</option>
+                                    <option value="15">15 分钟</option>
+                                    <option value="30">30 分钟</option>
+                                    <option value="60">1 小时</option>
+                                </select>
+                                <input id="surge-threshold" type="number" placeholder="涨跌幅 %" min="0.1" step="0.1" value="3" />
+                                <select id="surge-direction">
+                                    <option value="surge">爆拉 ↑</option>
+                                    <option value="dump">暴跌 ↓</option>
+                                </select>
+                                <button id="surge-add">添加</button>
+                            </div>
+                            <div id="alert-list"></div>
+                        </div>
+                    </div>
+                    <div id="panels-wrap" class="relative-wrap">
+                        <button id="panels-btn" class="tb-btn" title="侧边面板">面板 ▾</button>
+                        <div id="panels-panel" class="popover" hidden>
+                            <button class="panel-item" data-panel-id="objects">对象树</button>
+                            <button class="panel-item" data-panel-id="dataWindow">数据窗口</button>
+                        </div>
+                    </div>
+                    <button id="screenshot-btn" class="tb-btn" title="截图下载">📷</button>
+                </div>
+                <div class="header-right">
+                    <div id="search-wrap">
+                        <input id="search-input" type="text" placeholder="搜索币种，如 BTC / ETH…" autocomplete="off" />
+                        <div id="search-dropdown" hidden></div>
+                    </div>
+                    <div id="layout-custom-wrap">
+                        <button id="layout-btn" title="自定义布局">布局 ▾</button>
+                        <div id="layout-panel" hidden>
+                            <div class="panel-title">预设布局</div>
+                            <div class="layout-presets">
+                                <button class="layout-preset" data-rows="1" data-cols="1">1×1</button>
+                                <button class="layout-preset" data-rows="1" data-cols="2">1×2</button>
+                                <button class="layout-preset" data-rows="2" data-cols="1">2×1</button>
+                                <button class="layout-preset" data-rows="2" data-cols="2">2×2</button>
+                                <button class="layout-preset" data-rows="2" data-cols="4">2×4</button>
+                            </div>
+                            <div class="layout-custom-row">
+                                <span>自定义</span>
+                                <input id="layout-rows" type="number" min="1" max="4" value="2" />
+                                <span>行</span>
+                                <input id="layout-cols" type="number" min="1" max="4" value="2" />
+                                <span>列</span>
+                                <button id="layout-apply">应用</button>
+                            </div>
+                            <div class="panel-title split-title">分栏布局</div>
+                            <div class="split-dir-row">
+                                <button type="button" class="split-dir-btn active" data-dir="vertical">左右分栏</button>
+                                <button type="button" class="split-dir-btn" data-dir="horizontal">上下分栏</button>
+                            </div>
+                            <div class="split-region-row">
+                                <span class="split-region-label" id="split-primary-label">左区</span>
+                                <input id="split-p-rows" type="number" min="1" max="4" value="1" title="行数" />
+                                <span>行</span>
+                                <input id="split-p-cols" type="number" min="1" max="4" value="1" title="列数" />
+                                <span>列</span>
+                            </div>
+                            <div class="split-region-row">
+                                <span class="split-region-label" id="split-secondary-label">右区</span>
+                                <input id="split-s-rows" type="number" min="1" max="4" value="2" title="行数" />
+                                <span>行</span>
+                                <input id="split-s-cols" type="number" min="1" max="4" value="2" title="列数" />
+                                <span>列</span>
+                            </div>
+                            <button id="split-apply">应用分栏</button>
+                        </div>
+                    </div>
+                    <div id="layout-wrap">
+                        <select id="layout-select" title="切换布局">
+                            <option value="">— 选择布局 —</option>
+                        </select>
+                        <button id="save-layout-btn" title="保存当前布局为方案">保存布局</button>
+                        <button id="rename-layout-btn" title="重命名当前选中的布局方案" hidden>重命名</button>
+                        <button id="delete-layout-btn" title="删除当前选中的布局方案" hidden>删除</button>
+                        <input id="layout-name-input" type="text" placeholder="布局名称，回车保存" hidden />
+                        <input id="rename-layout-input" type="text" placeholder="新名称，回车确认" hidden />
+                    </div>
+                </div>
+            </div>
+            <div id="main">
+                <aside id="sidebar">
+                    <div class="sidebar-tabs" role="tablist">
+                        <button type="button" class="sidebar-tab active" id="watchlist-tab" data-sidebar-tab="watchlist">自选</button>
+                        <button type="button" class="sidebar-tab" id="holdings-tab" data-sidebar-tab="holdings">💼 功能模块</button>
+                    </div>
+                    <div id="watchlist-panel" class="sidebar-panel">
+                        <div class="sidebar-header">
+                            <span>自选</span>
+                            <div class="sidebar-actions">
+                                <button id="add-group-btn" class="icon-btn" title="新建分组">＋</button>
+                            </div>
+                        </div>
+                        <div id="group-list"></div>
+                        <div class="sidebar-subheader">
+                            <span>自选列表</span>
+                            <span id="token-count"></span>
+                        </div>
+                        <ul id="token-list"></ul>
+                    </div>
+                    <div id="holdings-panel" class="sidebar-panel" hidden>
+                        <div class="sidebar-header">
+                            <span>功能模块</span>
+                        </div>
+                        <button id="holdings-entry" class="holdings-entry" type="button" title="打开持仓视图">
+                            <span class="holdings-entry-icon">💼</span>
+                            <span class="holdings-entry-name">打开持仓视图</span>
+                        </button>
+                        <ul id="feature-list">
+                            <li>
+                                <button type="button" class="feature-entry" id="feature-pine-screener" data-feature="pine-screener">
+                                    <svg class="feature-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                        <path d="M3 2h10a1 1 0 0 1 1 1v9l-3 3H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.3" />
+                                        <path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                                    </svg>
+                                    <span class="feature-name">Pine 选币</span>
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" class="feature-entry" id="feature-trade-plan" data-feature="trade-plan">
+                                    <svg class="feature-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                        <path d="M3 2h7l3 3v9H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.3" />
+                                        <path d="M10 2v3h3M6 8h5M6 11h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                                    </svg>
+                                    <span class="feature-name">交易计划</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div id="sidebar-footer">
+                        <button id="help-btn" type="button" title="查看功能说明">ⓘ 说明</button>
+                        <button id="settings-btn" type="button" title="打开系统设置">⚙ 设置</button>
+                    </div>
+                </aside>
+                <button id="collapse-btn" type="button" title="收起自选">«</button>
+                <button id="sidebar-expand" title="展开自选">»</button>
+                <div id="right">
+                    <div id="dashboard"></div>
+                    <!-- 右侧功能面板：左侧「功能模块」里的功能显示在这里 -->
+                    <div id="feature-panel" hidden>
+                        <!-- Pine 选币扫描：全市场 USDT 现货跑 Pine 脚本，命中 signal 的币种列表 -->
+                        <div id="pine-screener-app" hidden>
+                            <div class="screener-toolbar">
+                                <span class="screener-title">
+                                    <span id="screener-title-text">Pine 选币扫描</span>
+                                </span>
+                                <label class="screener-field">
+                                    <span>脚本</span>
+                                    <select id="screener-script-select" title="选择已保存的 Pine 脚本"></select>
+                                </label>
+                                <label class="screener-field">
+                                    <span>市场</span>
+                                    <select id="screener-market" title="选择扫描的市场：现货 / U本位合约 / 全部">
+                                        <option value="spot">现货</option>
+                                        <option value="futures">U本位合约</option>
+                                        <option value="all">全部</option>
+                                    </select>
+                                </label>
+                                <label class="screener-field">
+                                    <span>历史K线</span>
+                                    <input id="screener-history" type="number" min="60" max="2000" step="20" value="500" title="每只币缓存的日K线根数" />
+                                </label>
+                                <button id="screener-start" type="button" class="screener-start">开始扫描</button>
+                                <button id="screener-stop" type="button" class="screener-stop" hidden>停止</button>
+                            </div>
+                            <div id="screener-inputs" class="screener-inputs" hidden></div>
+                            <div class="screener-history">
+                                <span class="screener-history-title">历史扫描</span>
+                                <select id="screener-history-select" title="选择已保存的扫描结果"></select>
+                                <button id="screener-history-rerun" type="button" class="screener-history-btn" disabled>重新扫描</button>
+                                <button id="screener-history-delete" type="button" class="screener-history-btn danger" disabled>删除</button>
+                            </div>
+                            <div id="screener-progress" class="screener-progress" hidden>
+                                <div class="screener-progress-track"><div id="screener-progress-fill" class="screener-progress-fill"></div></div>
+                                <span id="screener-status" class="screener-status"></span>
+                            </div>
+                            <div class="screener-body">
+                                <div id="screener-summary" class="screener-summary" hidden></div>
+                                <table id="screener-results" class="screener-results" hidden>
+                                    <thead>
+                                        <tr><th>代码</th><th>名称</th><th>最新价</th><th>涨跌幅</th><th>信号值</th></tr>
+                                    </thead>
+                                    <tbody id="screener-results-body"></tbody>
+                                </table>
+                                <div id="screener-empty" class="screener-empty">选择脚本并设置参数后，点击「开始扫描」。</div>
+                            </div>
+                        </div>
+                        <!-- 交易计划：用当前图表生成 Markdown 交易计划（含画线截图），保存到独立 IndexedDB -->
+                        <div id="trade-plan-app" hidden>
+                            <div class="trade-plan-toolbar">
+                                <span class="trade-plan-title">
+                                    <span id="trade-plan-title-text">交易计划</span>
+                                </span>
+                                <span id="trade-plan-message" class="trade-plan-message" role="status"></span>
+                                <button id="trade-plan-new" type="button" class="trade-plan-new">＋ 用当前图表新建</button>
+                                <button id="trade-plan-refresh" type="button" class="trade-plan-refresh" title="刷新列表">刷新</button>
+                            </div>
+                            <div class="trade-plan-listbar">
+                                <input id="trade-plan-search" type="search" class="trade-plan-search" placeholder="按币种名称 / 代码搜索" />
+                                <span class="trade-plan-sort-hint" title="按最后更新时间倒序排列">按更新时间 · 最新在前</span>
+                            </div>
+                            <div id="trade-plan-list" class="trade-plan-list"></div>
+                            <div class="trade-plan-pager">
+                                <button id="trade-plan-page-prev" type="button" class="trade-plan-page-btn" disabled>‹ 上一页</button>
+                                <span id="trade-plan-page-info" class="trade-plan-page-info"></span>
+                                <button id="trade-plan-page-next" type="button" class="trade-plan-page-btn" disabled>下一页 ›</button>
+                            </div>
+                            <div id="trade-plan-editor" class="trade-plan-editor" hidden>
+                                <div class="trade-plan-editor-topbar">
+                                    <button id="trade-plan-back" type="button" class="trade-plan-back">← 返回列表</button>
+                                    <span id="trade-plan-editor-id" class="trade-plan-editor-id"></span>
+                                    <button id="trade-plan-save" type="button" class="trade-plan-save">保存</button>
+                                    <button id="trade-plan-edit" type="button" class="trade-plan-edit" hidden>编辑</button>
+                                </div>
+                                <div class="trade-plan-editor-toolbar">
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="bold" title="加粗">B</button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="italic" title="斜体"><i>I</i></button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="strike" title="删除线"><s>S</s></button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="heading" title="标题（H2）">H2</button>
+                                    <span class="trade-plan-toolbar-sep" aria-hidden="true"></span>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="quote" title="引用">❝</button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="ul" title="无序列表">•</button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="ol" title="有序列表">1.</button>
+                                    <span class="trade-plan-toolbar-sep" aria-hidden="true"></span>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="code" title="行内代码">&lt;/&gt;</button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="codeblock" title="代码块">```</button>
+                                    <span class="trade-plan-toolbar-sep" aria-hidden="true"></span>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="link" title="插入链接">链接</button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="hr" title="分割线">—</button>
+                                    <button type="button" class="trade-plan-md-btn" data-md-action="table" title="插入表格">表格</button>
+                                    <span class="trade-plan-toolbar-sep" aria-hidden="true"></span>
+                                    <button id="trade-plan-insert-image" type="button" class="trade-plan-insert-image">插入图片</button>
+                                    <input id="trade-plan-image-file" type="file" accept="image/*" hidden />
+                                    <span id="trade-plan-editor-status" class="trade-plan-editor-status"></span>
+                                </div>
+                                <div id="trade-plan-editor-split" class="trade-plan-editor-split">
+                                    <textarea id="trade-plan-markdown" class="trade-plan-markdown" spellcheck="false"></textarea>
+                                    <div id="trade-plan-editor-divider" class="trade-plan-editor-divider" title="拖动调整宽度"></div>
+                                    <div id="trade-plan-preview" class="trade-plan-preview"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Pine 选币命中币的浮动 K 线预览窗口：点结果行时弹出，不离开选币面板即可连续查看 -->
+                    <div id="screener-preview" hidden>
+                        <div class="screener-preview-header">
+                            <span id="screener-preview-title" class="screener-preview-title">BTCUSDT</span>
+                            <select id="screener-preview-timeframe" class="screener-preview-timeframe" title="切换周期"></select>
+                            <button id="screener-preview-grid" type="button" class="screener-preview-btn">在网格打开</button>
+                            <button id="screener-preview-close" type="button" class="screener-preview-close" title="关闭预览">×</button>
+                        </div>
+                        <div id="screener-preview-chart" class="screener-preview-chart"></div>
+                    </div>
+                    <!-- 右下角 Pine 脚本编辑器：拖动顶部分割线可调整高度 -->
+                    <div id="pine-dock">
+                        <div id="pine-resize" title="拖动调整高度"></div>
+                        <div id="pine-dock-bar">
+                            <span class="pine-dock-title">Pine 脚本编辑器</span>
+                            <button id="pine-dock-toggle" type="button">收起 ▾</button>
+                        </div>
+                        <div id="pine-dock-body">
+                            <div id="pine-dock-toolbar">
+                                <input id="pine-name-input" type="text" placeholder="脚本名称" />
+                                <select id="pine-script-select" title="选择已保存的脚本"></select>
+                                <button id="pine-new-btn" type="button">新建</button>
+                                <button id="pine-save-btn" type="button">保存</button>
+                                <button id="pine-delete-btn" type="button">删除</button>
+                                <button id="pine-apply-btn" type="button">应用</button>
+                                <button id="pine-clear-btn" type="button">清空脚本</button>
+                            </div>
+                            <textarea id="pine-editor" spellcheck="false" placeholder="// Pine Script v5&#10;indicator('My EMA', overlay=true)&#10;plot(ta.ema(close, 20), color=color.orange)"></textarea>
+                            <div id="pine-status"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 我的持仓视图：覆盖右侧主区域，点「💼 功能模块」显示 -->
+                <div id="holdings-view" hidden>
+                    <div class="holdings-toolbar">
+                        <span class="holdings-title">我的持仓</span>
+                        <div class="currency-toggle" title="切换计价单位">
+                            <button type="button" data-currency="USDT" class="active">USDT</button>
+                            <button type="button" data-currency="RMB">RMB</button>
+                        </div>
+                        <span id="holdings-rate" class="holdings-rate" title="USDT→CNY 汇率"></span>
+                        <button id="holdings-add-btn" type="button" class="holdings-add-btn">＋ 添加持仓</button>
+                    </div>
+                    <div id="add-holding-form" class="add-holding-form" hidden>
+                        <input id="new-symbol" type="text" list="holdings-symbol-list" placeholder="交易对，如 TRXUSDT" autocomplete="off" />
+                        <datalist id="holdings-symbol-list"></datalist>
+                        <input id="new-qty" type="number" min="0" step="any" placeholder="数量" autocomplete="off" />
+                        <input id="new-price" type="number" min="0" step="any" placeholder="买入价" autocomplete="off" />
+                        <input id="new-date" type="date" />
+                        <input id="new-remark" type="text" placeholder="备注（可选）" autocomplete="off" />
+                        <button id="new-confirm" type="button">确定</button>
+                        <button id="new-cancel" type="button">取消</button>
+                    </div>
+                    <div class="holdings-summary">
+                        <span>买入总市值<b id="total-buy-value">—</b></span>
+                        <span>当前总市值<b id="total-now-value">—</b></span>
+                        <span>总盈亏<b id="total-profit-amount">—</b></span>
+                        <span>总盈亏比例<b id="total-profit-pct">—</b></span>
+                    </div>
+                    <div class="holdings-table-wrap">
+                        <table class="holdings-table">
+                            <thead>
+                                <tr>
+                                    <th>Logo</th>
+                                    <th>名称</th>
+                                    <th>买入日期</th>
+                                    <th>数量</th>
+                                    <th>买入价格</th>
+                                    <th>当前价格</th>
+                                    <th>买入市值</th>
+                                    <th>当前市值</th>
+                                    <th>盈亏金额</th>
+                                    <th>盈亏百分比</th>
+                                    <th>备注</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdings-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="holdings-splitter" class="holdings-splitter" title="拖动调整表格 / 图表高度"></div>
+                    <div class="holdings-charts">
+                        <div class="chart-panel">
+                            <div class="chart-title">金额占比</div>
+                            <div id="amount-bar-chart" class="bar-chart"></div>
+                        </div>
+                        <div class="chart-panel">
+                            <div class="chart-title">资产占比</div>
+                            <div id="asset-pie-chart" class="pie-chart"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 断线告警提示框：币安连接断开时弹出 -->
+            <div id="conn-alert" hidden>
+                <div class="conn-alert-box">
+                    <div class="conn-alert-title">⚠ 币安连接已断开</div>
+                    <div class="conn-alert-msg">实时数据已中断，正在自动重连。恢复后本提示会自动关闭。</div>
+                    <button id="conn-alert-close" type="button">知道了</button>
+                </div>
+            </div>
+            <!-- 触发告警的可点击消息：点击即静音该条告警的重复播报 -->
+            <div id="alert-toasts"></div>
+            <!-- 系统设置弹窗：左侧竖排 tab + 右侧内容区 -->
+            <div id="settings-overlay" hidden>
+                <div class="settings-modal">
+                    <div class="settings-modal-head">
+                        <span class="settings-modal-title">系统设置</span>
+                        <button id="settings-close-btn" type="button" class="settings-modal-close" title="关闭">✕</button>
+                    </div>
+                    <div class="settings-modal-main">
+                        <div class="settings-tabs" role="tablist">
+                            <button class="settings-tab active" type="button" data-panel="ema">EMA 配置</button>
+                            <button class="settings-tab" type="button" data-panel="sounds">警报声音</button>
+                            <button class="settings-tab" type="button" data-panel="alerts">告警维护</button>
+                            <button class="settings-tab" type="button" data-panel="holdings">持仓设置</button>
+                        </div>
+                        <div class="settings-modal-body">
+                            <div class="settings-tab-panel active" data-panel="ema">
+                                <div id="ema-line-list"></div>
+                                <button id="ema-add-btn" class="settings-add-btn">＋ 添加 EMA</button>
+                            </div>
+                            <div class="settings-tab-panel" data-panel="sounds">
+                                <div class="sound-panel-title">选择告警提示音</div>
+                                <div class="sound-picker-row">
+                                    <select id="sound-select" title="告警提示音（选中即试听）"></select>
+                                    <button id="sound-preview" type="button" title="试听当前选中的提示音">▶ 试听</button>
+                                </div>
+                                <div class="sound-upload-row">
+                                    <span>上传替换：</span>
+                                    <input id="sound-file" type="file" accept="audio/*" />
+                                    <button id="sound-reset" type="button">恢复默认声音</button>
+                                </div>
+                                <p class="sound-hint">从下拉框选择提示音，选中后自动试听；也可点「▶ 试听」播放当前选中声音。上传的音频仅保存在本机浏览器中。</p>
+                            </div>
+                            <div class="settings-tab-panel" data-panel="alerts">
+                                <div class="alerts-manage-toolbar">
+                                    <span class="alerts-manage-title">所有告警统一管理（删除 / 修改 / 排序）</span>
+                                    <select id="alert-sort" title="告警排序方式">
+                                        <option value="default">默认顺序</option>
+                                        <option value="symbol-asc">按币种 ↑</option>
+                                        <option value="symbol-desc">按币种 ↓</option>
+                                    </select>
+                                </div>
+                                <div id="alerts-manage-list"></div>
+                            </div>
+                            <div class="settings-tab-panel" data-panel="holdings">
+                                <div class="sound-panel-title">USDT → CNY 汇率</div>
+                                <div class="settings-row">
+                                    <span>汇率来源</span>
+                                    <select id="rate-mode" title="汇率来源">
+                                        <option value="auto">自动（CoinGecko）</option>
+                                        <option value="manual">手动</option>
+                                    </select>
+                                </div>
+                                <div class="settings-row">
+                                    <span>手动汇率</span>
+                                    <input id="rate-manual" type="number" min="0.01" step="0.01" />
+                                </div>
+                                <div class="settings-row">
+                                    <span>最近自动汇率</span>
+                                    <span id="rate-last-auto">—</span>
+                                </div>
+                                <p class="sound-hint">自动模式通过 CoinGecko（ids=tether&amp;vs_currencies=cny,usd）定时刷新 USDT→CNY 汇率；网络不可用时回退到手动值（默认 6.65）。CoinGecko 是除币安外的第二个网络出口，已在需求确认中指定。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 功能说明弹窗：功能概述 + 数据来源与网络说明 -->
+            <div id="help-overlay" hidden>
+                <div class="help-modal">
+                    <div class="help-modal-head">
+                        <span class="help-modal-title">功能说明</span>
+                        <button id="help-close-btn" type="button" class="help-modal-close" title="关闭">✕</button>
+                    </div>
+                    <div class="help-modal-body">
+                        <section class="help-section">
+                            <h3>系统简介</h3>
+                            <p>币圈 K 线监控大屏：一屏多格子实时监控多个币种 K 线，支持自选收藏分组、预设网格布局、Pine 指标、价格告警与消息推送。</p>
+                        </section>
+                        <section class="help-section">
+                            <h3>主要功能</h3>
+                            <ul class="help-list">
+                                <li><b>多格监控</b>：每格独立配置币种与周期（5/15/30 分钟、1 小时），支持网格与自定义分栏布局，布局自动保存。</li>
+                                <li><b>自选收藏</b>：按分组管理自选币种，点击列表快速切换当前格子。</li>
+                                <li><b>EMA 均线</b>：每个币种可单独添加并显示 EMA 均线。</li>
+                                <li><b>价格告警</b>：支持价格上/下破、爆拉、暴跌；触发后声音提醒 + 格子高亮，点击告警消息可静音。</li>
+                                <li><b>Pine 脚本</b>：内置 Pine v5 指标编辑器，脚本可应用到全部格子或清空。</li>
+                                <li><b>警报声音</b>：可从下拉框选择提示音（选中即试听）、上传自定义提示音，或恢复默认。</li>
+                                <li><b>我的持仓</b>：记录买入币种 / 日期 / 数量 / 价格 / 备注，自动刷新当前价格并计算盈亏，支持 USDT / RMB 双计价与金额 / 数量占比图。</li>
+                                <li><b>本地持久化</b>：布局、收藏、告警、声音、持仓设置保存在本机浏览器，无需登录。</li>
+                            </ul>
+                        </section>
+                        <section class="help-section">
+                            <h3>数据来源与网络</h3>
+                            <ul class="help-list">
+                                <li>实时 K 线：<code>wss://stream.binance.com</code>（币安官方 WebSocket）</li>
+                                <li>历史 K 线 / 价格查询：<code>https://api.binance.com</code>、<code>https://fapi.binance.com</code>（币安官方 REST）</li>
+                                <li>USDT→CNY 汇率：<code>https://api.coingecko.com</code>（CoinGecko，用于「我的持仓」RMB 计价；网络不可用时回退到手动汇率）。</li>
+                                <li>以上币安接口是<b>本应用的主要网络出口</b>，CoinGecko 仅为持仓计价提供汇率；应用本身<strong>不依赖任何自建服务器</strong>。</li>
+                                <li>断网或币安不可达时，应用仍可打开，但行情会中断并提示断线，恢复后自动重连。</li>
+                            </ul>
+                        </section>
+                        <section class="help-section">
+                            <h3>隐私</h3>
+                            <p>自选收藏、布局、告警、上传的声音等数据<b>仅保存在本机浏览器</b>，不会上传到任何服务器。</p>
+                        </section>
+                        <p class="help-version">Vela Dashboard · 桌面版 0.2.0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script type="module" src="./dashboard.ts"></script>
+    </body>
+</html>

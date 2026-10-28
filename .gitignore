@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.scratchpad/
+*.log
+.env
+.env.local
+.svn/
+.DS_Store
+.venv/
+venv/
+__pycache__/
+*.pyc

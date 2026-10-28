@@ -1,0 +1,128 @@
+//@version=6
+indicator("【神级反转猎手】2025终极实盘版 - 趋势全程狂推（纯净无计算）", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ==================== 1. 均线 ====================
+e5   = ta.ema(close, 5)
+e10  = ta.ema(close, 10)
+e20  = ta.ema(close, 20)
+e30  = ta.ema(close, 30)
+e60  = ta.ema(close, 60)
+e120 = ta.ema(close, 120)
+
+plot(e5,   color=color.red)
+plot(e10,  color=color.orange)
+plot(e20,  color=color.yellow)
+plot(e30,  color=color.green)
+plot(e60,  color=color.blue)
+plot(e120, color=#f805e8)
+
+// ==================== 2. K线变黑 ====================
+barcolor(close < close[20] ? color.black : na)
+
+// ==================== 3. 密集区判断 ====================
+ma_converge_threshold = 0.0011
+max_ma = math.max(e5, e10, e20, e30)
+min_ma = math.min(e5, e10, e20, e30)
+is_ma_converge = (max_ma - min_ma) / max_ma < ma_converge_threshold and max_ma > 0
+
+plotshape(is_ma_converge, location=location.belowbar, color=color.rgb(39,176,112), 
+     style=shape.labelup, text="✪", textcolor=color.white, size=size.small)
+
+// ==================== 4. 历史低点圆圈（保持原样）===================
+cond = barstate.islast
+moveBar = input.int(0, "偏移K线数", minval=0)
+x5   = 5   + moveBar
+x10  = 10  + moveBar
+x20  = 20  + moveBar
+x30  = 30  + moveBar
+x60  = 60  + moveBar
+x120 = 120 + moveBar
+
+plot(cond ? low[5]    : na, color=color.red,    linewidth=5, offset=-x5,    style=plot.style_circles)
+plot(cond ? low[10]   : na, color=color.orange, linewidth=5, offset=-x10,   style=plot.style_circles)
+plot(cond ? low[20]   : na, color=color.yellow, linewidth=5, offset=-x20,   style=plot.style_circles)
+plot(cond ? low[30]   : na, color=color.green,  linewidth=5, offset=-x30,   style=plot.style_circles)
+plot(cond ? low[60]   : na, color=color.blue,   linewidth=5, offset=-x60,   style=plot.style_circles)
+plot(cond ? low[120]  : na, color=#f805e8,      linewidth=5, offset=-x120,  style=plot.style_circles)
+
+plotshape(cond ? low[5]   : na, location=location.absolute, color=color.new(color.red,90),    textcolor=color.red,    text="5",   offset=-x5,    size=size.small)
+plotshape(cond ? low[10]  : na, location=location.absolute, color=color.new(color.orange,90), textcolor=color.orange, text="10",  offset=-x10,   size=size.small)
+plotshape(cond ? low[20]  : na, location=location.absolute, color=color.new(color.yellow,90), textcolor=color.yellow, text="20",  offset=-x20,   size=size.small)
+plotshape(cond ? low[30]  : na, location=location.absolute, color=color.new(color.green,90),  textcolor=color.green,  text="30",  offset=-x30,   size=size.small)
+plotshape(cond ? low[60]  : na, location=location.absolute, color=color.new(color.blue,90),   textcolor=color.blue,   text="60",  offset=-x60,   size=size.small)
+plotshape(cond ? low[120] : na, location=location.absolute, color=color.new(#f805e8,90),     textcolor=#f805e8,      text="120", offset=-x120,  size=size.small)
+
+// ==================== 5. 趋势状态记忆（离开密集区后继续跟踪！） ====================
+var bool   in_bull_trend = false
+var bool   in_bear_trend = false
+var float  bull_start_price = na
+var float  bear_start_price = na
+
+ma_up   = e20 > e20[1] and e30 > e30[1]
+ma_down = e20 < e20[1] and e30 < e30[1]
+
+// 首次突破 → 启动趋势
+if is_ma_converge and ma_up and not is_ma_converge[1]
+    in_bull_trend := true
+    in_bear_trend := false
+    bull_start_price := close
+
+if is_ma_converge and ma_down and not is_ma_converge[1]
+    in_bear_trend := true
+    in_bull_trend := false
+    bear_start_price := close
+
+// 趋势终结条件（死叉 或 极端回撤30%）
+bull_end = in_bull_trend and e20 < e30
+bear_end = in_bear_trend and e20 > e30
+
+if bull_end or (in_bull_trend and close < bull_start_price * 0.7)
+    in_bull_trend := false
+    bull_start_price := na
+
+if bear_end or (in_bear_trend and close > bear_start_price * 1.3)
+    in_bear_trend := false
+    bear_start_price := na
+
+// ==================== 6. 神针（影线改为常见 2.0 倍） ====================
+vol_surge = volume > ta.sma(volume, 50) * 1.8
+body = math.abs(close - open)
+up_wick  = high - math.max(open, close)
+low_wick = math.min(open, close) - low
+
+god_rise = low_wick > body * 2.0 and vol_surge and is_ma_converge
+god_fall = up_wick  > body * 2.0 and vol_surge and is_ma_converge
+
+plotshape(god_rise, location=location.belowbar, color=color.lime, style=shape.triangleup,   size=size.large, text="涨")
+plotshape(god_fall, location=location.abovebar, color=color.red,  style=shape.triangledown, size=size.large, text="跌")
+
+// ==================== 7. 放量 + 加速（全程跟踪） ====================
+lowest_10  = ta.lowest(low,  10)
+highest_10 = ta.highest(high, 10)
+
+vol_pump  = volume > ta.sma(volume, 30) * 2.2 and close > open * 1.01 and in_bull_trend
+vol_crash = volume > ta.sma(volume, 30) * 2.2 and close < open * 0.99 and in_bear_trend
+
+big_up   = in_bull_trend and high == highest_10
+big_down = in_bear_trend and low  == lowest_10
+
+// 背景高亮
+bgcolor(is_ma_converge ? color.new(#27b070, 97) : na)
+bgcolor(in_bull_trend ? color.new(color.lime, 94) : na)
+bgcolor(in_bear_trend ? color.new(color.red, 94) : na)
+
+
+
+// ==================== 8. 终极纯净完整参数警报（零计算、零报错） ====================
+alertcondition(god_rise,  title='神针·抄底针',   message='WEBHOOK:RISE|{{ticker}}|神针涨 现货重仓抄底|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(god_fall,  title='神针·逃顶针',   message='WEBHOOK:FALL|{{ticker}}|神针跌 10倍重仓空|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(is_ma_converge and ma_up and not is_ma_converge[1],   title='密集向上突破（启动多头）', message='WEBHOOK:UP_BREAK|{{ticker}}|密集向上突破 多头趋势启动|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(is_ma_converge and ma_down and not is_ma_converge[1], title='密集向下突破（启动空头）', message='WEBHOOK:DOWN_BREAK|{{ticker}}|密集向下突破 空头趋势启动|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(in_bull_trend, title='【持续】多头趋势进行中',   message='WEBHOOK:UP_ING|{{ticker}}|多头趋势持续拉升 现价{{close}}|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(in_bear_trend, title='【持续】空头趋势进行中',   message='WEBHOOK:DOWN_ING|{{ticker}}|空头趋势持续杀跌 现价{{close}}|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(vol_pump,  title='放量拉升（趋势中）', message='WEBHOOK:VOL_PUMP|{{ticker}}|多头趋势巨量拉升 现货重仓冲|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(vol_crash, title='放量杀跌（趋势中）', message='WEBHOOK:VOL_CRASH|{{ticker}}|空头趋势巨量砸盘 10倍空单杀|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(big_up,   title='多头加速上涨提醒', message='WEBHOOK:PUMP_ACC|{{ticker}}|多头趋势加速 新高{{close}} 满仓冲|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(big_down, title='空头加速下跌提醒', message='WEBHOOK:CRASH_ACC|{{ticker}}|空头趋势加速 新低{{close}} 10倍空上车|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(is_ma_converge and not is_ma_converge[1], title='密集区形成✪', message='WEBHOOK:CONVERGE_APPEAR|{{ticker}}|均线密集区形成✪ 等待方向突破|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')
+alertcondition(bar_index == 1, title='脚本加载成功', message='WEBHOOK:TEST|{{ticker}}|2025终极实盘版已启动 趋势全程狂推|{{open}}|{{close}}|{{high}}|{{low}}|{{time}}|{{interval}}')

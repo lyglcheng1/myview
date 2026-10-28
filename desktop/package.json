@@ -1,0 +1,57 @@
+{
+  "name": "myview-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Desktop shell (Electron) for the Vela multi-symbol dashboard. The renderer is the playground dashboard page built with Vite; electron/ contains the main process.",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k -s first \"npm:dev:server\" \"npm:dev:electron\"",
+    "dev:server": "vite --config vite.renderer.config.mts",
+    "dev:electron": "wait-on tcp:127.0.0.1:5190 && node scripts/launch-electron.cjs",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "vite build --config vite.renderer.config.mts",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "pack": "electron-builder --win",
+    "icon": "node scripts/generate-icon.cjs",
+    "typecheck": "tsc -p tsconfig.electron.json --noEmit",
+    "lint": "eslint electron vite.renderer.config.mts src/global.d.ts scripts"
+  },
+  "build": {
+    "appId": "com.myview.dashboard",
+    "productName": "myview",
+    "directories": {
+      "output": "dist/installer",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist/renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "myview-setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "myview.${ext}"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.5",
+    "wait-on": "^9.5.1"
+  }
+}

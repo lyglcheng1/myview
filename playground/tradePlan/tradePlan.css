@@ -1,0 +1,524 @@
+/* Trade-plan feature panel: list + split Markdown editor. */
+
+#trade-plan-app [hidden] {
+    display: none !important;
+}
+
+#trade-plan-app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 10px;
+    padding: 12px 14px;
+    box-sizing: border-box;
+}
+
+/* ── Toolbar ─────────────────────────── */
+.trade-plan-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+
+.trade-plan-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.trade-plan-message {
+    margin-left: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trade-plan-new {
+    padding: 6px 12px;
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.trade-plan-new:hover {
+    filter: brightness(1.1);
+}
+.trade-plan-new:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.trade-plan-refresh {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+}
+.trade-plan-refresh:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.trade-plan-new:focus-visible,
+.trade-plan-refresh:focus-visible,
+.trade-plan-back:focus-visible,
+.trade-plan-save:focus-visible,
+.trade-plan-edit:focus-visible,
+.trade-plan-insert-image:focus-visible,
+.trade-plan-md-btn:focus-visible,
+.trade-plan-page-btn:focus-visible,
+.trade-plan-card-edit:focus-visible,
+.trade-plan-card-delete:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* ── Plan list ───────────────────────── */
+.trade-plan-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+}
+
+.trade-plan-empty {
+    margin: 40px auto;
+    max-width: 420px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+/* ── List search bar + pager ─────────── */
+.trade-plan-listbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.trade-plan-search {
+    flex: 0 1 280px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.trade-plan-search:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent-dim);
+}
+.trade-plan-search::placeholder {
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+.trade-plan-sort-hint {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+.trade-plan-pager {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 2px 0 4px;
+}
+.trade-plan-page-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.trade-plan-page-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+.trade-plan-page-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.trade-plan-page-info {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.trade-plan-card {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+.trade-plan-card:hover {
+    border-color: var(--text-dim);
+}
+
+.trade-plan-card-thumb {
+    flex: none;
+    width: 96px;
+    height: 64px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+}
+.trade-plan-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.trade-plan-card-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.trade-plan-card-id {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    word-break: break-all;
+}
+.trade-plan-card-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+.trade-plan-card-excerpt {
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.85;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.trade-plan-card-actions {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    justify-content: center;
+}
+.trade-plan-card-edit,
+.trade-plan-card-delete {
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+}
+.trade-plan-card-edit:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+.trade-plan-card-delete {
+    color: var(--danger);
+    border-color: transparent;
+}
+.trade-plan-card-delete:hover {
+    border-color: var(--danger);
+}
+
+/* ── Editor ──────────────────────────── */
+.trade-plan-editor {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.trade-plan-editor-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+.trade-plan-editor-id {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trade-plan-back {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+}
+.trade-plan-back:hover {
+    color: var(--text);
+}
+.trade-plan-save,
+.trade-plan-edit {
+    padding: 6px 14px;
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.trade-plan-save:hover,
+.trade-plan-edit:hover {
+    filter: brightness(1.1);
+}
+
+.trade-plan-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+.trade-plan-insert-image {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+}
+.trade-plan-insert-image:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+.trade-plan-md-btn {
+    padding: 4px 8px;
+    min-width: 28px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    line-height: 1.4;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+.trade-plan-md-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+    background: var(--panel);
+}
+.trade-plan-md-btn i {
+    font-style: italic;
+}
+.trade-plan-md-btn s {
+    text-decoration: line-through;
+}
+.trade-plan-toolbar-sep {
+    flex: none;
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 2px;
+}
+.trade-plan-editor-status {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.trade-plan-editor-split {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+.trade-plan-markdown {
+    flex: 1 1 50%;
+    min-width: 0;
+    resize: none;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    box-sizing: border-box;
+}
+.trade-plan-markdown:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent-dim);
+}
+.trade-plan-preview {
+    flex: 1 1 50%;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    font-size: 13px;
+    line-height: 1.7;
+    word-break: break-word;
+}
+.trade-plan-editor-divider {
+    flex: none;
+    width: 6px;
+    cursor: col-resize;
+    border-radius: 3px;
+    background: transparent;
+}
+.trade-plan-editor-divider:hover,
+.trade-plan-editor-divider:active {
+    background: var(--accent-dim);
+}
+
+/* ── Read-only view ──────────────────── */
+.trade-plan-editor.readonly .trade-plan-markdown,
+.trade-plan-editor.readonly .trade-plan-editor-divider,
+.trade-plan-editor.readonly .trade-plan-editor-toolbar {
+    display: none;
+}
+.trade-plan-editor.readonly .trade-plan-preview {
+    flex: 1 1 100%;
+}
+
+/* ── Preview typography ──────────────── */
+.trade-plan-preview h1,
+.trade-plan-preview h2,
+.trade-plan-preview h3 {
+    margin: 14px 0 6px;
+    line-height: 1.4;
+}
+.trade-plan-preview h1 {
+    font-size: 18px;
+}
+.trade-plan-preview h2 {
+    font-size: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+}
+.trade-plan-preview h3 {
+    font-size: 14px;
+}
+.trade-plan-preview p {
+    margin: 8px 0;
+}
+.trade-plan-preview ul,
+.trade-plan-preview ol {
+    margin: 8px 0;
+    padding-left: 22px;
+}
+.trade-plan-preview blockquote {
+    margin: 8px 0;
+    padding: 4px 10px;
+    border-left: 3px solid var(--accent-dim);
+    color: var(--text-dim);
+    background: var(--panel-2);
+    border-radius: 0 4px 4px 0;
+}
+.trade-plan-preview code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 4px;
+}
+.trade-plan-preview pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow-x: auto;
+}
+.trade-plan-preview pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+.trade-plan-preview table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 12px;
+}
+.trade-plan-preview th,
+.trade-plan-preview td {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    text-align: left;
+}
+.trade-plan-preview th {
+    background: var(--panel-2);
+    font-weight: 600;
+}
+.trade-plan-preview img {
+    max-width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    margin: 8px 0;
+}
+.trade-plan-preview hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 14px 0;
+}
